@@ -17,15 +17,16 @@ move to `main`. `main` holds only finished assets: flat 16x16 PNG tiles named `<
 
 - Every tile is exactly 16x16. Saved as palette PNG (mode P) with index 0 transparent, or RGBA if a tile has more
   than 255 colors.
-- Background: near-white pixels (every channel >= 235) flood-filled from the tile border become transparent.
-  Enclosed white holes also become transparent when all of these hold:
-  - the hole is at least 3 px,
-  - at least 60% of its border pixels match the tile's outer outline colors (sum of RGB differences <= 60),
-  - those border pixels are dark (R+G+B <= 450).
-
-  This clears bow interiors, ring, lock and handle holes, and donut holes. Gem highlights, glass and eye whites
-  are kept. Known misses: large white panels inside a dark frame (menus, calendars) can be over-removed, and
-  1–2 px gaps stay white. The user fixes those by hand.
+- Background removal is conservative: the user touches up tiles anyway, and a leftover white pixel is easier to
+  fix than a lost subject pixel.
+  - The reference background is the most common near-white (every channel >= 235) border color of the tile.
+    Pixels within 6 per channel of it, flood-filled from the tile border, become transparent. Light subject
+    pixels (silver, pale fills, highlights) touching the background are kept.
+  - A near-white pixel left with 3+ of its 4 sides open (transparent or off-tile) is removed as noise.
+  - Enclosed white holes (ring, bow, donut interiors) stay white by default. `split.py --holes` clears them with
+    the old rule (hole >= 3 px, >= 60% of its wall matches the outline colors and is dark), but that rule also
+    erases dice pips, book pages, shoe whites and eye whites, so use it only for sheets of rings and the like.
+  - Known leftovers: hole interiors and faint off-white noise along the tile edge. The user fixes those by hand.
 - Fully transparent tiles are dropped. Tiles whose source had a colored background keep it.
 - Names: one base name per sheet, `{subject}_{category}_{shape/material/features}_{colors}`. Lowercase English
   joined by `_`, 4–9 words, at most 80 characters. The full vocabulary is in `tools/NAMING.md`.

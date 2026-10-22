@@ -1,14 +1,22 @@
 """Split sheets into 16x16 tiles, remove the white background, save as <out>/<name>-NNNN.png.
-Run from anywhere: python tools/split.py <work_dir> <repo_root> <out_dir> [test]
+Run from anywhere: python tools/split.py <work_dir> <repo_root> <out_dir> [test] [--holes]
 Needs <work_dir>/manifest.json (tools/manifest.py) and <work_dir>/names/*.json ({"id": "name"}).
-`test` mode splits the first 40 sheets with dummy names so the background removal can be eyeballed."""
+`test` mode splits the first 40 sheets with dummy names so the background removal can be eyeballed.
+`--holes` also clears enclosed white holes (ring/bow interiors); off by default because it also eats pips, pages
+and eye whites."""
 import os,sys,json,re,subprocess,collections
 from PIL import Image
-def bgfill(t):
+TOL=6
+def bgfill(t,fill_holes=False):
+    # conservative: only pixels within TOL of the tile's own background white are cleared, so light subject
+    # pixels (silver, highlights, pale fills) touching the background stay; leftovers are fixed by hand
     px=t.load();w,h=t.size
-    white=lambda p:p[3]>0 and min(p[:3])>=235
-    st=[(x,y) for x in range(w) for y in (0,h-1)]+[(x,y) for y in range(h) for x in (0,w-1)]
-    seen=set();bg=set()
+    border=[(x,y) for x in range(w) for y in (0,h-1)]+[(x,y) for y in range(1,h-1) for x in (0,w-1)]
+    near=collections.Counter(px[q][:3] for q in border if px[q][3] and min(px[q][:3])>=235)
+    if not near: return t
+    ref=near.most_common(1)[0][0]
+    white=lambda p:p[3]>0 and max(abs(a-b) for a,b in zip(p[:3],ref))<=TOL
+    st=list(border);seen=set();bg=set()
     while st:
         x,y=st.pop()
         if (x,y) in seen or not(0<=x<w and 0<=y<h):continue
@@ -16,7 +24,12 @@ def bgfill(t):
         if not white(px[x,y]):continue
         bg.add(px[x,y][:3]);px[x,y]=(0,0,0,0)
         st+= [(x+1,y),(x-1,y),(x,y+1),(x,y-1)]
-    holes(t,white,bg)
+    # single near-white noise specks left on the background edge (3+ of 4 sides open)
+    open_=lambda x,y:not(0<=x<w and 0<=y<h) or px[x,y][3]==0
+    specks=[(x,y) for y in range(h) for x in range(w) if px[x,y][3] and min(px[x,y][:3])>=235
+            and sum(open_(x+dx,y+dy) for dx,dy in N4)>=3]
+    for q in specks: px[q]=(0,0,0,0)
+    if fill_holes: holes(t,white,bg)
     return t
 MATCH,RATIO,DARK=0,0.6,450
 N4=((1,0),(-1,0),(0,1),(0,-1))
@@ -59,9 +72,10 @@ def save(t,path):
             p.save(path,transparency=0,optimize=True);return
     t.save(path,optimize=True)
 if __name__=='__main__':
-    S,REPO,OUT=sys.argv[1],sys.argv[2],sys.argv[3]
-
-    TEST=len(sys.argv)>4
+    HOLES='--holes' in sys.argv
+    args=[a for a in sys.argv[1:] if a!='--holes']
+    S,REPO,OUT=args[0],args[1],args[2]
+    TEST=len(args)>3
     items=json.load(open(S+'/manifest.json',encoding='utf-8'))
     names={}
     if not TEST:
@@ -81,7 +95,7 @@ if __name__=='__main__':
         g=it['grid']
         for r in range(g):
             for c in range(g):
-                t=bgfill(im.crop((c*16,r*16,c*16+16,r*16+16)))
+                t=bgfill(im.crop((c*16,r*16,c*16+16,r*16+16)),HOLES)
                 if t.getbbox() is None: continue
                 used[name]+=1
                 fn=f"{name}-{used[name]:04d}.png"

@@ -26,6 +26,9 @@ move to `main`. `main` holds only finished assets: flat 16x16 PNG tiles named `<
   - Enclosed white holes (ring, bow, donut interiors) stay white by default. `split.py --holes` clears them with
     the old rule (hole >= 3 px, >= 60% of its wall matches the outline colors and is dark), but that rule also
     erases dice pips, book pages, shoe whites and eye whites, so use it only for sheets of rings and the like.
+  - Sheets whose white subject parts touch the background with no outline lose those parts to the fill. List
+    their manifest ids in `W/keepbg.txt` (one per line) and `split.py` keeps their white background as is; the
+    user removes it by hand.
   - Known leftovers: hole interiors and faint off-white noise along the tile edge. The user fixes those by hand.
 - Fully transparent tiles are dropped. Tiles whose source had a colored background keep it.
 - Names: one base name per sheet, `{subject}_{category}_{shape/material/features}_{colors}`. Lowercase English

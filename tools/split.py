@@ -3,7 +3,9 @@ Run from anywhere: python tools/split.py <work_dir> <repo_root> <out_dir> [test]
 Needs <work_dir>/manifest.json (tools/manifest.py) and <work_dir>/names/*.json ({"id": "name"}).
 `test` mode splits the first 40 sheets with dummy names so the background removal can be eyeballed.
 `--holes` also clears enclosed white holes (ring/bow interiors); off by default because it also eats pips, pages
-and eye whites."""
+and eye whites.
+Sheet ids listed in <work_dir>/keepbg.txt (one per line) keep their white background untouched, for subjects whose
+white parts touch the background without an outline."""
 import os,sys,json,re,subprocess,collections
 from PIL import Image
 TOL=6
@@ -86,6 +88,9 @@ if __name__=='__main__':
     for line in subprocess.run(['git','-C',REPO,'ls-tree','--name-only','main'],capture_output=True,text=True,encoding='utf-8').stdout.splitlines():
         m=re.match(r'(.+)-(\d{4})\.png$',line)
         if m: used[m.group(1)]=max(used[m.group(1)],int(m.group(2)))
+    keepbg=set()
+    if os.path.exists(S+'/keepbg.txt'):
+        keepbg={int(l) for l in open(S+'/keepbg.txt',encoding='utf-8').read().split()}
     os.makedirs(OUT,exist_ok=True)
     log=[];missing=[]
     for it in (items[:40] if TEST else items):
@@ -95,8 +100,10 @@ if __name__=='__main__':
         g=it['grid']
         for r in range(g):
             for c in range(g):
-                t=bgfill(im.crop((c*16,r*16,c*16+16,r*16+16)),HOLES)
-                if t.getbbox() is None: continue
+                t=im.crop((c*16,r*16,c*16+16,r*16+16))
+                cleared=bgfill(t.copy(),HOLES)
+                if cleared.getbbox() is None: continue
+                if it['id'] not in keepbg: t=cleared
                 used[name]+=1
                 fn=f"{name}-{used[name]:04d}.png"
                 save(t,os.path.join(OUT,fn)); log.append(f"{it['path']}\t{r*g+c+1}\t{fn}")
